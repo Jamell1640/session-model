@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Session Model</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0a0f;
+    --card:     #12121a;
+    --border:   #1e1e2e;
+    --text:     #f0ede8;
+    --muted:    #4a4a5a;
+    --dim:      #2a2a3a;
+    --red:      #ef4444;
+    --red-bg:   #1a0808;
+    --amber:    #f59e0b;
+    --amber-bg: #1a1200;
+    --green:    #22c55e;
+    --green-bg: #081a0e;
+    --indigo:   #6366f1;
+    --mono:     'SF Mono', 'Fira Code', 'Consolas', monospace;
+    --sans:     -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 60px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    width: 100%;
+    max-width: 520px;
+    margin-bottom: 36px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .brand { font-size: 11px; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+  .session-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+
+  /* ── MAIN CARD ── */
+  .card {
+    width: 100%;
+    max-width: 520px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  /* ── QUESTION ROW ── */
+  .q-row {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.2s;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+  }
+  .q-row:last-child { border-bottom: none; }
+  .q-row.locked    { cursor: default; }
+  .q-row.inactive  { opacity: 0.38; cursor: default; pointer-events: none; }
+  .q-row.active    { background: #0f0f1a; }
+
+  /* streetlight pill */
+  .light-col {
+    width: 48px;
+    min-width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px 0;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  /* states */
+  .q-row.state-red    .dot.d-red    { background: var(--red);   box-shadow: 0 0 8px var(--red); }
+  .q-row.state-amber  .dot.d-amber  { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .q-row.state-green  .dot.d-green  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+  /* content */
+  .q-body {
+    flex: 1;
+    padding: 16px 16px 16px 0;
+  }
+  .q-number {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .q-text {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.35;
+    margin-bottom: 8px;
+  }
+  .q-row.inactive .q-text { color: var(--muted); }
+
+  /* answer buttons */
+  .answers {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  .ans-btn {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 5px 11px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.04em;
+  }
+  .ans-btn:hover { border-color: var(--indigo); color: var(--text); }
+  .ans-btn.sel-green { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+  .ans-btn.sel-amber { border-color: var(--amber); background: var(--amber-bg); color: var(--amber); }
+  .ans-btn.sel-red   { border-color: var(--red);   background: var(--red-bg);   color: var(--red);   }
+  .q-row.locked .ans-btn { pointer-events: none; }
+
+  /* verdict badge */
+  .verdict {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: 3px;
+    margin-top: 8px;
+    display: block;
+    line-height: 1.6;
+    max-width: 420px;
+  }
+  .verdict.green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+  .verdict.amber { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); }
+  .verdict.red   { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red);   }
+
+  /* ── SIGNAL BAR ── */
+  .signal-bar {
+    width: 100%;
+    max-width: 520px;
+    margin-top: 14px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 52px;
+    transition: all 0.3s;
+  }
+  .signal-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .signal-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-align: right;
+  }
+  .signal-value.green { color: var(--green); }
+  .signal-value.amber { color: var(--amber); }
+  .signal-value.red   { color: var(--red);   }
+
+  /* ── RESET ── */
+  .reset-btn {
+    margin-top: 24px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    padding: 7px 20px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .reset-btn:hover { color: var(--text); border-color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">Session Model</span>
+  <span class="session-tag" id="session-clock">--:-- ET</span>
+</header>
+
+<div class="card" id="checklist"></div>
+
+<div class="signal-bar" id="signal-bar">
+  <span class="signal-label">Signal</span>
+  <span class="signal-value" id="signal-value">—</span>
+</div>
+
+<button class="reset-btn" onclick="reset()">Reset</button>
+
+<script>
+const QUESTIONS = [
+  {
+    id: 'q1',
+    label: 'Q1',
+    text: 'What is the anchor?',
+    answers: [
+      { label: 'PD LEAN BULL',  state: 'green', verdict: 'Bullish anchor — aim PDH' },
+      { label: 'PD LEAN BEAR',  state: 'green', verdict: 'Bearish anchor — aim PDL' },
+      { label: 'ASIA BULL',     state: 'amber', verdict: 'No PD lean — Asia is anchor (bull)' },
+      { label: 'ASIA BEAR',     state: 'amber', verdict: 'No PD lean — Asia is anchor (bear)' },
+      { label: 'NO SIGNAL',     state: 'red',   verdict: 'No anchor — stand aside' },
+    ]
+  },
+  {
+    id: 'q2',
+    label: 'Q2',
+    text: 'Did Asia confirm or flip it?',
+    answers: [
+      { label: 'CONFIRMS',       state: 'green', verdict: 'Asia aligned — anchor intact' },
+      { label: 'ACCEPTS + EXTENDS', state: 'amber', verdict: 'Asia extended beyond PD level — Asia takes over' },
+      { label: 'CONFLICT',       state: 'red',   verdict: 'Asia opposed — watch London to resolve' },
+    ]
+  },
+  {
+    id: 'q3',
+    label: 'Q3',
+    text: 'Did London confirm or flip it?',
+    answers: [
+      { label: 'CONFIRMS',            state: 'green', verdict: 'London aligned — setup building' },
+      { label: 'CEILING / FLOOR REJECT — LOWER HALF', state: 'red', verdict: 'Rejection in lower half — 62.5% bearish day' },
+      { label: 'CEILING / FLOOR REJECT — UPPER HALF', state: 'amber', verdict: 'Rejection in upper half — caution, watch Pre-KZ' },
+      { label: 'CONFLICT',            state: 'red',   verdict: 'London opposed — no trade unless Pre-KZ resolves' },
+      { label: 'FLIP',                state: 'amber', verdict: 'London reversed anchor — bias now opposite' },
+    ]
+  },
+  {
+    id: 'q4',
+    label: 'Q4',
+    text: 'Did Pre-KZ sweep the opposing side?',
+    answers: [
+      { label: 'SWEPT + RECLAIMED',   state: 'green', verdict: 'Setup confirmed — manipulation building before open' },
+      { label: 'NO SWEEP',            state: 'amber', verdict: 'No Pre-KZ sweep — KZ must do all the work' },
+      { label: 'SWEPT + CLOSED BEYOND', state: 'red', verdict: 'Structural break — flag raised, no trade' },
+    ]
+  },
+  {
+    id: 'q5',
+    label: 'Q5',
+    text: 'What did the KZ do at 9:30?',
+    answers: [
+      {
+        label: 'ENTRY 1 — SWEEP + RECLAIM',
+        state: 'green',
+        verdict: 'KZ swept Pre-KZ opposing side + closed back inside — flag drops. Enter on reclaim candle close. Stop beyond sweep extreme. Target PDH/PDL. (77% hit rate)'
+      },
+      {
+        label: 'ENTRY 2 — WICK + CONTINUE',
+        state: 'green',
+        verdict: 'KZ wicked toward bias level + closed back inside Pre-KZ — Scenario B. Enter on first 1m FVG during pullback. Stop above wick extreme. Target PDH/PDL. (70% hit rate)'
+      },
+      {
+        label: 'ENTRY 3 — DISPLACEMENT',
+        state: 'green',
+        verdict: 'KZ closed BEYOND Pre-KZ in bias direction — pure momentum. Enter on first 1m FVG after displacement candle. No flag drop needed. Target PDH/PDL. (88.5% hit rate)'
+      },
+      {
+        label: 'NO RECLAIM — FLAG UP',
+        state: 'red',
+        verdict: 'KZ swept opposing side but did not close back inside — no trade. Price goes 169pts against lean 79% of the time.'
+      },
+      {
+        label: 'BOTH SIDES — NO RECLAIM',
+        state: 'red',
+        verdict: 'KZ swept both sides of Pre-KZ with no reclaim — coinflip, no trade.'
+      },
+    ]
+  },
+];
+
+let state = QUESTIONS.map(() => null); // null = unanswered
+
+function render() {
+  const container = document.getElementById('checklist');
+  container.innerHTML = '';
+
+  // Find first unanswered question
+  const activeIdx = state.findIndex(s => s === null);
+
+  QUESTIONS.forEach((q, i) => {
+    const answered  = state[i] !== null;
+    const isActive  = i === activeIdx;
+    const isLocked  = answered;
+    const isInactive= !answered && !isActive;
+
+    const ans = answered ? state[i] : null;
+    const lightState = ans ? `state-${ans.state}` : '';
+
+    const row = document.createElement('div');
+    row.className = `q-row ${lightState} ${isLocked ? 'locked' : ''} ${isInactive ? 'inactive' : ''} ${isActive ? 'active' : ''}`;
+
+    // streetlight dots
+    row.innerHTML = `
+      <div class="light-col">
+        <div class="dot d-red"></div>
+        <div class="dot d-amber"></div>
+        <div class="dot d-green"></div>
+      </div>
+      <div class="q-body">
+        <div class="q-number">${q.label}</div>
+        <div class="q-text">${q.text}</div>
+        <div class="answers" id="ans-${i}"></div>
+        ${answered ? `<div class="verdict ${ans.state}">${ans.verdict}</div>` : ''}
+      </div>
+    `;
+
+    container.appendChild(row);
+
+    // Add answer buttons
+    const ansDiv = row.querySelector(`#ans-${i}`);
+    q.answers.forEach(a => {
+      const btn = document.createElement('button');
+      btn.className = `ans-btn ${answered && state[i].label === a.label ? `sel-${a.state}` : ''}`;
+      btn.textContent = a.label;
+      if (!isInactive) {
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          state[i] = a;
+          render();
+        };
+      }
+      ansDiv.appendChild(btn);
+    });
+  });
+
+  updateSignal();
+}
+
+function updateSignal() {
+  const bar   = document.getElementById('signal-bar');
+  const val   = document.getElementById('signal-value');
+  const answered = state.filter(s => s !== null);
+  const allDone  = answered.length === QUESTIONS.length;
+
+  if (answered.length === 0) {
+    val.className = 'signal-value';
+    val.textContent = '—';
+    bar.style.borderColor = 'var(--border)';
+    return;
+  }
+
+  // Red overrides amber overrides green
+  const hasRed   = answered.some(s => s.state === 'red');
+  const hasAmber = answered.some(s => s.state === 'amber');
+
+  if (!allDone) {
+    // Show in-progress
+    if (hasRed) {
+      val.className = 'signal-value red';
+      val.textContent = 'NO TRADE';
+      bar.style.borderColor = 'var(--red)';
+    } else if (hasAmber) {
+      val.className = 'signal-value amber';
+      val.textContent = 'WATCHING...';
+      bar.style.borderColor = 'var(--amber)';
+    } else {
+      val.className = 'signal-value green';
+      val.textContent = 'BUILDING...';
+      bar.style.borderColor = 'var(--green)';
+    }
+    return;
+  }
+
+  // All five answered
+  const q5 = state[4];
+  if (q5.state === 'green') {
+    val.className = 'signal-value green';
+    val.textContent = 'ENTRY — TAKE THE TRADE';
+    bar.style.borderColor = 'var(--green)';
+  } else if (hasRed) {
+    val.className = 'signal-value red';
+    val.textContent = 'NO TRADE';
+    bar.style.borderColor = 'var(--red)';
+  } else {
+    val.className = 'signal-value amber';
+    val.textContent = 'CAUTION — WAIT';
+    bar.style.borderColor = 'var(--amber)';
+  }
+}
+
+function reset() {
+  state = QUESTIONS.map(() => null);
+  render();
+}
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  const et  = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const h   = String(et.getHours()).padStart(2, '0');
+  const m   = String(et.getMinutes()).padStart(2, '0');
+  document.getElementById('session-clock').textContent = `${h}:${m} ET`;
+}
+updateClock();
+setInterval(updateClock, 30000);
+
+render();
+</script>
+</body>
+</html>
